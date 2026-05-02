@@ -13,9 +13,8 @@ class User(UserMixin, db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
-    department = db.relationship('Department', backref='users', foreign_keys=[department_id])
-    applications = db.relationship('LeaveApplication', backref='employee', lazy='dynamic', foreign_keys='LeaveApplication.user_id')
-    quotas = db.relationship('AnnualQuota', backref='user', lazy='dynamic')
+    department = db.relationship('Department', foreign_keys=[department_id], back_populates='members')
+    managed_department = db.relationship('Department', foreign_keys='Department.manager_id', uselist=False, back_populates='manager')
 
     def to_dict(self):
         return {
@@ -34,6 +33,9 @@ class Department(db.Model):
     description = db.Column(db.String(200))
     manager_id = db.Column(db.Integer, db.ForeignKey('user.id'))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    members = db.relationship('User', foreign_keys='User.department_id', back_populates='department')
+    manager = db.relationship('User', foreign_keys=[manager_id], back_populates='managed_department')
 
     def to_dict(self):
         return {
@@ -72,11 +74,13 @@ class AnnualQuota(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     holiday_type = db.relationship('HolidayType', backref='quotas')
+    user = db.relationship('User', backref='quotas_list')
 
     def to_dict(self):
         return {
             'id': self.id,
             'user_id': self.user_id,
+            'user_name': self.user.name if self.user else None,
             'holiday_type_id': self.holiday_type_id,
             'holiday_type_name': self.holiday_type.name if self.holiday_type else None,
             'year': self.year,
@@ -101,7 +105,8 @@ class LeaveApplication(db.Model):
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
     holiday_type = db.relationship('HolidayType', backref='applications')
-    approver = db.relationship('User', backref='approved_applications', foreign_keys=[approver_id])
+    employee = db.relationship('User', foreign_keys=[user_id], backref='applications_list')
+    approver = db.relationship('User', foreign_keys=[approver_id], backref='approved_applications_list')
 
     def to_dict(self):
         return {

@@ -7,6 +7,7 @@ const ManageQuotas = () => {
   const [quotas, setQuotas] = useState([])
   const [holidayTypes, setHolidayTypes] = useState([])
   const [departments, setDepartments] = useState([])
+  const [users, setUsers] = useState([])
   const [loading, setLoading] = useState(false)
   const [year, setYear] = useState(new Date().getFullYear())
   const [modalVisible, setModalVisible] = useState(false)
@@ -27,14 +28,16 @@ const ManageQuotas = () => {
   const fetchData = async () => {
     setLoading(true)
     try {
-      const [quotasRes, typesRes, deptsRes] = await Promise.all([
+      const [quotasRes, typesRes, deptsRes, usersRes] = await Promise.all([
         axios.get('/api/holidays/quotas', { params: { year } }),
         axios.get('/api/holidays/types'),
-        axios.get('/api/users/departments')
+        axios.get('/api/users/departments'),
+        axios.get('/api/users')
       ])
       setQuotas(quotasRes.data.quotas || [])
       setHolidayTypes(typesRes.data.types || [])
       setDepartments(deptsRes.data.departments || [])
+      setUsers(usersRes.data.users || [])
     } catch (error) {
       message.error('获取数据失败')
       console.error(error)
@@ -96,12 +99,9 @@ const ManageQuotas = () => {
   const columns = [
     {
       title: '员工',
-      dataIndex: 'user_id',
-      key: 'user_id',
-      render: (_, record) => {
-        const userApp = quotas.find(q => q.id === record.id)
-        return userApp?.to_dict?.()?.name || `用户 ${record.user_id}`
-      }
+      dataIndex: 'user_name',
+      key: 'user_name',
+      render: (text, record) => text || `用户 ${record.user_id}`
     },
     {
       title: '假期类型',
@@ -215,10 +215,10 @@ const ManageQuotas = () => {
                 label="用户"
                 rules={[{ required: true, message: '请选择用户' }]}
               >
-                <Select placeholder="请选择用户">
-                  {quotas.map((q) => (
-                    <Select.Option key={q.user_id} value={q.user_id}>
-                      {`用户 ${q.user_id}`}
+                <Select placeholder="请选择用户" showSearch optionFilterProp="children">
+                  {users.map((u) => (
+                    <Select.Option key={u.id} value={u.id}>
+                      {u.name} ({u.username})
                     </Select.Option>
                   ))}
                 </Select>
