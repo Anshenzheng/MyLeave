@@ -21,6 +21,13 @@ def get_pending_days(user_id, holiday_type_id, year):
     ).all()
     return sum(app.days for app in pending_apps)
 
+def get_department_user_ids(department_id):
+    if department_id:
+        users = User.query.filter_by(department_id=department_id).all()
+    else:
+        users = User.query.filter_by(department_id=current_user.department_id).all()
+    return [u.id for u in users]
+
 @applications_bp.route('', methods=['GET'])
 @login_required
 def get_applications():
@@ -35,10 +42,11 @@ def get_applications():
     if current_user.role == 'employee':
         query = query.filter_by(user_id=current_user.id)
     elif current_user.role == 'manager':
-        if department_id:
-            query = query.join(User, User.id == LeaveApplication.user_id).filter(User.department_id == department_id)
+        dept_user_ids = get_department_user_ids(department_id)
+        if dept_user_ids:
+            query = query.filter(LeaveApplication.user_id.in_(dept_user_ids))
         else:
-            query = query.join(User, User.id == LeaveApplication.user_id).filter(User.department_id == current_user.department_id)
+            query = query.filter(LeaveApplication.user_id == -1)
 
     if status:
         query = query.filter_by(status=status)
