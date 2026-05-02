@@ -4,12 +4,22 @@ from app import db
 from app.models import LeaveApplication, AnnualQuota, User, Department
 from datetime import datetime, date
 from dateutil import parser
+from sqlalchemy import and_
 
 applications_bp = Blueprint('applications', __name__)
 
 def calculate_days(start_date, end_date):
     delta = end_date - start_date
     return delta.days + 1
+
+def get_pending_days(user_id, holiday_type_id, year):
+    pending_apps = LeaveApplication.query.filter(
+        LeaveApplication.user_id == user_id,
+        LeaveApplication.holiday_type_id == holiday_type_id,
+        LeaveApplication.status == 'pending',
+        db.extract('year', LeaveApplication.start_date) == year
+    ).all()
+    return sum(app.days for app in pending_apps)
 
 @applications_bp.route('', methods=['GET'])
 @login_required
@@ -26,9 +36,9 @@ def get_applications():
         query = query.filter_by(user_id=current_user.id)
     elif current_user.role == 'manager':
         if department_id:
-            query = query.join(User).filter(User.department_id == department_id)
+            query = query.join(User, User.id == LeaveApplication.user_id).filter(User.department_id == department_id)
         else:
-            query = query.join(User).filter(User.department_id == current_user.department_id)
+            query = query.join(User, User.id == LeaveApplication.user_id).filter(User.department_id == current_user.department_id)
 
     if status:
         query = query.filter_by(status=status)
@@ -82,17 +92,24 @@ def create_application():
     if not quota:
         return jsonify({'error': '该年度此假期类型无额度配置'}), 400
 
-    remaining = quota.total_days - quota.used_days
+    pending_days = get_pending_days(current_user.id, holiday_type_id, year)
+    used_days = quota.used_days + pending_days
+    remaining = quota.total_days - used_days
+
     if remaining < days:
         return jsonify({
-            'error': f'额度不足，剩余 {remaining} 天，申请 {days} 天',
+            'error': f'额度不足，剩余 {remaining} 天（含待审批 {pending_days} 天），申请 {days} 天',
             'remaining': remaining,
+            'used_days': quota.used_days,
+            'pending_days': pending_days,
+            'total_days': quota.total_days,
             'requested': days
         }), 400
 
     overlapping = LeaveApplication.query.filter(
         LeaveApplication.user_id == current_user.id,
         LeaveApplication.status != 'rejected',
+        LeaveApplication.status != 'cancelled',
         LeaveApplication.start_date <= end_date,
         LeaveApplication.end_date >= start_date
     ).first()
@@ -139,7 +156,10 @@ def approve_application(app_id):
     if not quota:
         return jsonify({'error': '额度信息不存在'}), 400
 
-    remaining = quota.total_days - quota.used_days
+    pending_days = get_pending_days(application.user_id, application.holiday_type_id, year)
+    used_days = quota.used_days + (pending_days - application.days)
+    remaining = quota.total_days - used_days
+
     if remaining < application.days:
         return jsonify({'error': '额度不足，无法通过审批'}), 400
 
