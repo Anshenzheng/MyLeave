@@ -10,6 +10,19 @@ import io
 
 reports_bp = Blueprint('reports', __name__)
 
+def get_department_user_ids(department_id):
+    if current_user.role == 'manager':
+        if department_id:
+            users = User.query.filter_by(department_id=department_id).all()
+        else:
+            users = User.query.filter_by(department_id=current_user.department_id).all()
+        return [u.id for u in users]
+    elif department_id:
+        users = User.query.filter_by(department_id=department_id).all()
+        return [u.id for u in users]
+    else:
+        return None
+
 @reports_bp.route('/calendar', methods=['GET'])
 @login_required
 def get_calendar_data():
@@ -35,13 +48,12 @@ def get_calendar_data():
         LeaveApplication.end_date >= start_date
     )
 
-    if current_user.role == 'manager':
-        if department_id:
-            query = query.join(User, User.id == LeaveApplication.user_id).filter(User.department_id == department_id)
+    dept_user_ids = get_department_user_ids(department_id)
+    if dept_user_ids is not None:
+        if dept_user_ids:
+            query = query.filter(LeaveApplication.user_id.in_(dept_user_ids))
         else:
-            query = query.join(User, User.id == LeaveApplication.user_id).filter(User.department_id == current_user.department_id)
-    elif department_id:
-        query = query.join(User, User.id == LeaveApplication.user_id).filter(User.department_id == department_id)
+            query = query.filter(LeaveApplication.user_id == -1)
 
     applications = query.all()
 
@@ -78,13 +90,12 @@ def export_excel():
 
     query = LeaveApplication.query
 
-    if current_user.role == 'manager':
-        if department_id:
-            query = query.join(User, User.id == LeaveApplication.user_id).filter(User.department_id == department_id)
+    dept_user_ids = get_department_user_ids(department_id)
+    if dept_user_ids is not None:
+        if dept_user_ids:
+            query = query.filter(LeaveApplication.user_id.in_(dept_user_ids))
         else:
-            query = query.join(User, User.id == LeaveApplication.user_id).filter(User.department_id == current_user.department_id)
-    elif department_id:
-        query = query.join(User, User.id == LeaveApplication.user_id).filter(User.department_id == department_id)
+            query = query.filter(LeaveApplication.user_id == -1)
 
     if start_date_str:
         query = query.filter(LeaveApplication.start_date >= parser.parse(start_date_str).date())
@@ -167,13 +178,12 @@ def get_statistics():
         LeaveApplication.status == 'approved'
     )
 
-    if current_user.role == 'manager':
-        if department_id:
-            query = query.join(User, User.id == LeaveApplication.user_id).filter(User.department_id == department_id)
+    dept_user_ids = get_department_user_ids(department_id)
+    if dept_user_ids is not None:
+        if dept_user_ids:
+            query = query.filter(LeaveApplication.user_id.in_(dept_user_ids))
         else:
-            query = query.join(User, User.id == LeaveApplication.user_id).filter(User.department_id == current_user.department_id)
-    elif department_id:
-        query = query.join(User, User.id == LeaveApplication.user_id).filter(User.department_id == department_id)
+            query = query.filter(LeaveApplication.user_id == -1)
 
     applications = query.all()
 
